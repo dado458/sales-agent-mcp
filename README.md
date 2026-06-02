@@ -141,6 +141,15 @@ Each tenant gets:
 - Custom product description and pricing in the system prompt
 - Independent usage metering per plan (basic: 500 calls/mo, pro: 5 000, enterprise: unlimited)
 
+## Known limitations
+
+| Limitation | Detail |
+|---|---|
+| **No API retry** | If the Anthropic API returns an error mid-loop, the exception propagates uncaught and the agent returns an error to the host. Wrap `handle_message` calls with retry logic at the integration layer if needed. |
+| **Reply length capped at 1 024 tokens** | Each internal LLM call has a fixed `max_tokens=1024`. Very long agent replies (e.g. detailed proposals) will be silently truncated. Set `SALES_MODEL` to a model with higher throughput or subclass `SalesAgent` to override. |
+| **`schedule_followup` is a marker, not a trigger** | The tool writes `pending_followup: true` in memory. Nothing happens automatically — a separate `BaseWorker` process must scan memory and act on it. |
+| **Local memory not thread-safe** | `LocalMemoryStore` (default) is not safe for concurrent requests. Use `REDIS_URL` for any production or multi-instance deployment. |
+
 ## Architecture
 
 ```
