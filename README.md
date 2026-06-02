@@ -107,9 +107,9 @@ These tools are used internally by Claude inside the agent loop — they are not
 | Tool | Description |
 |---|---|
 | `analyze_lead` | Analyze message, detect sentiment, objection type, pipeline fit |
-| `generate_reply` | Generate calibrated reply for current stage and strategy |
+| `get_reply_strategy` | Return the recommended strategy and key point for Claude to use when writing its reply |
 | `update_crm` | Update stage and notes for a lead |
-| `schedule_followup` | Schedule automatic follow-up for silent leads |
+| `schedule_followup` | Write a pending follow-up marker in memory (requires a `BaseWorker` implementation to actually send it — see [edge-llm-core docs](https://github.com/dado458/edge-llm-core)) |
 
 ## Environment variables
 

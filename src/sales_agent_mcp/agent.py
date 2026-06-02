@@ -6,7 +6,7 @@ from edge_llm.core.tenants.base import TenantConfig
 
 from .pipeline import SalesPipeline
 from .tools.definitions import SALES_TOOLS
-from .tools.implementations import analyze_lead, generate_reply, update_crm, schedule_followup
+from .tools.implementations import analyze_lead, get_reply_strategy, update_crm, schedule_followup
 
 _PROMPT_TEMPLATE = (Path(__file__).parent / "prompts" / "system.md").read_text(encoding="utf-8")
 
@@ -43,7 +43,7 @@ class SalesAgent(EdgeAgent):
         mem = self._memory
         return {
             "analyze_lead":    lambda **kw: analyze_lead(**kw),
-            "generate_reply":  lambda **kw: generate_reply(**kw),
+            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw),
             "update_crm":      lambda **kw: update_crm(**kw, memory=mem),
             "schedule_followup": lambda **kw: schedule_followup(**kw, memory=mem),
         }

@@ -33,7 +33,7 @@ Pricing: {pricing}
 - Goal: propose a concrete next step
 - Create real urgency based on the available offer
 - Always propose a specific action: call, demo, trial activation
-- Use `generate_reply` with strategy="close"
+- Use `get_reply_strategy` with strategy="close"
 
 ## WON / LOST
 - WON: confirm, pass onboarding instructions

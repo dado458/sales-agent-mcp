@@ -12,7 +12,7 @@ from edge_llm.core.usage.local import LocalUsageTracker
 from sales_agent_mcp.pipeline import SalesPipeline
 from sales_agent_mcp.agent import SalesAgent
 from sales_agent_mcp.tools.implementations import (
-    analyze_lead, generate_reply, update_crm, schedule_followup,
+    analyze_lead, get_reply_strategy, update_crm, schedule_followup,
 )
 
 
@@ -107,25 +107,25 @@ def test_analyze_lead_with_history():
     assert "current_stage" in result
 
 
-# ── Tool: generate_reply ──────────────────────────────────────────────────────
+# ── Tool: get_reply_strategy ──────────────────────────────────────────────────
 
-def test_generate_reply_required_fields():
-    result = generate_reply(strategy="build_value", key_point="reduces work by 60%")
+def test_get_reply_strategy_required_fields():
+    result = get_reply_strategy(strategy="build_value", key_point="reduces work by 60%")
     assert result["strategy"] == "build_value"
     assert result["key_point"] == "reduces work by 60%"
     assert result["tone"] == "professional"
     assert "hint" in result
 
 
-def test_generate_reply_custom_tone():
-    result = generate_reply(strategy="close", key_point="offer expires Friday", tone="urgent")
+def test_get_reply_strategy_custom_tone():
+    result = get_reply_strategy(strategy="close", key_point="offer expires Friday", tone="urgent")
     assert result["tone"] == "urgent"
 
 
-def test_generate_reply_all_strategies():
+def test_get_reply_strategy_all_strategies():
     for strategy in ["build_rapport", "discover_pain", "build_value",
                      "handle_objection", "close", "nurture"]:
-        result = generate_reply(strategy=strategy, key_point="test")
+        result = get_reply_strategy(strategy=strategy, key_point="test")
         assert result["strategy"] == strategy
 
 
@@ -266,7 +266,7 @@ def test_agent_tools_have_required_fields(agent):
 
 
 def test_agent_tool_map_complete(agent):
-    expected = {"analyze_lead", "generate_reply", "update_crm", "schedule_followup"}
+    expected = {"analyze_lead", "get_reply_strategy", "update_crm", "schedule_followup"}
     assert set(agent.get_tool_map().keys()) == expected
 
 

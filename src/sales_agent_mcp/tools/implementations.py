@@ -17,7 +17,7 @@ def analyze_lead(message: str, current_stage: str, history_summary: str = "") ->
     }
 
 
-def generate_reply(strategy: str, key_point: str, tone: str = "professional") -> dict:
+def get_reply_strategy(strategy: str, key_point: str, tone: str = "professional") -> dict:
     return {
         "strategy":   strategy,
         "key_point":  key_point,

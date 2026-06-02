@@ -13,8 +13,8 @@ SALES_TOOLS = [
         },
     },
     {
-        "name": "generate_reply",
-        "description": "Generate a calibrated sales reply for the current stage and strategy.",
+        "name": "get_reply_strategy",
+        "description": "Get the recommended strategy and key point to use when crafting your reply for the current stage.",
         "input_schema": {
             "type": "object",
             "properties": {

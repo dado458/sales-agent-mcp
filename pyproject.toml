@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "edge-llm-core>=0.1.0",
-    "anthropic>=0.40.0",
+    "anthropic>=0.40.0,<2.0",
     "mcp>=1.0.0",
 ]
 
