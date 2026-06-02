@@ -1,11 +1,20 @@
 # sales-agent-mcp
 
-> **⚠️ ALPHA SOFTWARE — v0.1.0**
-> This package is in early alpha. APIs may change without notice between minor versions.
-> It has not been audited for production security. Do not use to store sensitive customer data
-> without your own security review. All LLM calls consume Anthropic API credits — monitor your usage.
-> The authors are not responsible for costs, data loss, compliance violations, or any damages
-> arising from use. This is a developer tool, not a finished commercial product.
+> **⚠️ ALPHA SOFTWARE — FOR DEVELOPMENT USE ONLY — v0.1.0**
+>
+> This package is intended for **development, prototyping, and research purposes only**.
+> It is not a finished commercial product and is not suitable for production use without significant additional hardening.
+>
+> - APIs may change without notice between minor versions in the 0.x series.
+> - This package has not been audited for security. Do not use it to store or process real customer data,
+>   leads, or any personal information without your own thorough security and compliance review.
+> - All LLM calls consume Anthropic API credits. Costs are your responsibility — monitor usage actively.
+> - LLM outputs are non-deterministic. The agent may produce incorrect, incomplete, or inappropriate responses.
+>   Do not rely on agent output for consequential business decisions without human review.
+> - There is no guarantee of uptime, correctness, or fitness for any particular purpose.
+> - **The authors accept no responsibility for any costs, data loss, security breaches, compliance violations,
+>   missed sales, or damages of any kind arising from the use or misuse of this software.**
+> - Use entirely at your own risk.
 
 **Autonomous sales agent MCP server — stateful, multi-tenant, built on [edge-llm-core](https://pypi.org/project/edge-llm-core/).**
 
