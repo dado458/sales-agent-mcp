@@ -24,9 +24,14 @@
 
 ## Install
 
+> **Note:** PyPI publication is planned for v1.0.0 (stable release).
+> Until then, install directly from GitHub:
+
 ```bash
-pip install sales-agent-mcp
+pip install git+https://github.com/dado458/sales-agent-mcp.git
 ```
+
+> Once published to PyPI (v1.0.0), installation will simplify to `pip install sales-agent-mcp`.
 
 ## Quick start
 
