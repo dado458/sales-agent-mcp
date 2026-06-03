@@ -1,5 +1,7 @@
 # sales-agent-mcp
 
+![Tests](https://github.com/dado458/sales-agent-mcp/actions/workflows/test.yml/badge.svg)
+
 > **⚠️ ALPHA SOFTWARE — FOR DEVELOPMENT USE ONLY — v0.1.0**
 >
 > This package is intended for **development, prototyping, and research purposes only**.
