@@ -40,12 +40,13 @@ class SalesAgent(EdgeAgent):
         return SALES_TOOLS
 
     def get_tool_map(self) -> dict[str, callable]:
-        mem = self._memory
+        mem    = self._memory
+        client = self._client
         return {
-            "analyze_lead":    lambda **kw: analyze_lead(**kw),
-            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw),
-            "update_crm":      lambda **kw: update_crm(**kw, memory=mem),
-            "schedule_followup": lambda **kw: schedule_followup(**kw, memory=mem),
+            "analyze_lead":       lambda **kw: analyze_lead(**kw, client=client),
+            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw, client=client),
+            "update_crm":         lambda **kw: update_crm(**kw, memory=mem),
+            "schedule_followup":  lambda **kw: schedule_followup(**kw, memory=mem),
         }
 
     def initial_entity_state(self) -> dict:
