@@ -1,6 +1,8 @@
 from pathlib import Path
+from typing import Optional
 
 from edge_llm.core.agent import EdgeAgent
+from edge_llm.core.catalog import AbstractCatalogStore
 from edge_llm.core.state_machine import StateMachine, StageContext
 from edge_llm.core.tenants.base import TenantConfig
 
@@ -21,6 +23,10 @@ _DEFAULT_META = {
 
 class SalesAgent(EdgeAgent):
 
+    def __init__(self, *args, catalog_store: Optional[AbstractCatalogStore] = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._catalog_store = catalog_store
+
     def get_state_machine(self) -> StateMachine:
         return SalesPipeline()
 
@@ -40,10 +46,10 @@ class SalesAgent(EdgeAgent):
         return SALES_TOOLS
 
     def get_tool_map(self, tenant_id: str = "") -> dict[str, callable]:
-        mem    = self._memory
-        client = self._client
-        # Resolve the tenant's product catalog at call time so the tool
-        # closure always has the latest version (tenants can update it mid-session).
+        mem           = self._memory
+        client        = self._client
+        catalog_store = self._catalog_store
+        # Resolve text catalog from tenant meta (keyword fallback when no vector store).
         catalog = ""
         if tenant_id:
             try:
@@ -51,11 +57,16 @@ class SalesAgent(EdgeAgent):
             except KeyError:
                 pass
         return {
-            "search_product_catalog": lambda **kw: search_product_catalog(**kw, catalog=catalog),
-            "analyze_lead":           lambda **kw: analyze_lead(**kw, client=client),
-            "get_reply_strategy":     lambda **kw: get_reply_strategy(**kw, client=client),
-            "update_crm":             lambda **kw: update_crm(**kw, memory=mem),
-            "schedule_followup":      lambda **kw: schedule_followup(**kw, memory=mem),
+            "search_product_catalog": lambda **kw: search_product_catalog(
+                **kw,
+                catalog=catalog,
+                catalog_store=catalog_store,
+                tenant_id=tenant_id,
+            ),
+            "analyze_lead":       lambda **kw: analyze_lead(**kw, client=client),
+            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw, client=client),
+            "update_crm":         lambda **kw: update_crm(**kw, memory=mem),
+            "schedule_followup":  lambda **kw: schedule_followup(**kw, memory=mem),
         }
 
     def initial_entity_state(self) -> dict:

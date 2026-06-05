@@ -106,7 +106,7 @@ def _strategy_fallback(strategy: str, key_point: str, tone: str) -> dict:
 def update_crm(lead_id: str, new_stage: str, notes: str = "",
                next_action: str = "", memory=None) -> dict:
     if memory:
-        state = memory.get_entity_state(lead_id)
+        state = memory.get_entity_state(lead_id) or {}
         existing_notes = state.get("notes", [])
         if not isinstance(existing_notes, list):
             existing_notes = []
@@ -117,37 +117,48 @@ def update_crm(lead_id: str, new_stage: str, notes: str = "",
     return {"lead_id": lead_id, "stage": new_stage, "updated": True}
 
 
-def search_product_catalog(query: str, catalog: str = "") -> dict:
+def search_product_catalog(
+    query: str,
+    catalog: str = "",
+    catalog_store=None,
+    tenant_id: str = "",
+) -> dict:
     """
-    Keyword search over the tenant's product catalog text.
-    Splits by paragraphs/sections, scores by term overlap, returns top 3 chunks.
-    Falls back gracefully when no catalog is configured.
+    Search the product catalog for chunks relevant to the query.
+
+    Priority:
+    1. Vector search via ChromaCatalogStore (semantic, if configured and has data).
+    2. Keyword search over catalog text in meta (fast fallback, no embeddings).
+    3. Empty response with a setup hint.
     """
-    if not catalog or not catalog.strip():
-        return {
-            "query":   query,
-            "results": [],
-            "note":    "No product catalog configured. Ask the tenant to upload one via PATCH /tenants/me/config.",
-        }
+    # 1 — vector search
+    if catalog_store is not None and tenant_id:
+        try:
+            if catalog_store.count(tenant_id) > 0:
+                results = catalog_store.search(tenant_id, query, n_results=3)
+                if results:
+                    return {"query": query, "results": results, "source": "vector"}
+        except Exception:
+            pass  # fall through to keyword search
 
-    query_terms = set(query.lower().split())
-    # Split on double newlines (paragraphs) or markdown headers
-    import re
-    chunks = [c.strip() for c in re.split(r"\n{2,}|(?=^#{1,3} )", catalog, flags=re.MULTILINE) if c.strip()]
+    # 2 — keyword search over meta catalog text
+    if catalog and catalog.strip():
+        import re
+        query_terms = set(query.lower().split())
+        chunks = [c.strip() for c in re.split(r"\n{2,}|(?=#{1,3} )", catalog, flags=re.MULTILINE) if c.strip()]
+        scored = sorted(
+            ((len(set(c.lower().split()) & query_terms), c) for c in chunks),
+            reverse=True,
+        )
+        top = [c for _, c in scored[:3] if _ > 0]
+        if top:
+            return {"query": query, "results": top, "source": "keyword"}
 
-    scored: list[tuple[int, str]] = []
-    for chunk in chunks:
-        chunk_words = set(chunk.lower().split())
-        score = len(query_terms & chunk_words)
-        if score > 0:
-            scored.append((score, chunk))
-
-    scored.sort(reverse=True)
-    top = [chunk for _, chunk in scored[:3]]
-
+    # 3 — nothing available
     return {
         "query":   query,
-        "results": top if top else ["No specific information found for this query."],
+        "results": [],
+        "note":    "No product catalog found. Upload one via POST /tenants/me/catalog.",
     }
 
 

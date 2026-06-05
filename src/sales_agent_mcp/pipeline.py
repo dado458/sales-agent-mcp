@@ -22,13 +22,13 @@ class SalesPipeline(StateMachine):
         "INTERESTED": StageContext(
             stage="INTERESTED",
             objective="Build specific value tied to their problem. Propose demo or trial.",
-            recommended_tools=["generate_reply", "analyze_lead"],
+            recommended_tools=["get_reply_strategy", "analyze_lead", "search_product_catalog"],
             possible_next_stages=["OBJECTION", "CLOSING", "LOST"],
         ),
         "OBJECTION": StageContext(
             stage="OBJECTION",
             objective="Resolve the objection without contradicting. Empathize first.",
-            recommended_tools=["analyze_lead", "generate_reply"],
+            recommended_tools=["analyze_lead", "get_reply_strategy", "search_product_catalog"],
             possible_next_stages=["INTERESTED", "CLOSING", "LOST"],
         ),
         "CLOSING": StageContext(
