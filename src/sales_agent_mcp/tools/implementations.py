@@ -117,6 +117,40 @@ def update_crm(lead_id: str, new_stage: str, notes: str = "",
     return {"lead_id": lead_id, "stage": new_stage, "updated": True}
 
 
+def search_product_catalog(query: str, catalog: str = "") -> dict:
+    """
+    Keyword search over the tenant's product catalog text.
+    Splits by paragraphs/sections, scores by term overlap, returns top 3 chunks.
+    Falls back gracefully when no catalog is configured.
+    """
+    if not catalog or not catalog.strip():
+        return {
+            "query":   query,
+            "results": [],
+            "note":    "No product catalog configured. Ask the tenant to upload one via PATCH /tenants/me/config.",
+        }
+
+    query_terms = set(query.lower().split())
+    # Split on double newlines (paragraphs) or markdown headers
+    import re
+    chunks = [c.strip() for c in re.split(r"\n{2,}|(?=^#{1,3} )", catalog, flags=re.MULTILINE) if c.strip()]
+
+    scored: list[tuple[int, str]] = []
+    for chunk in chunks:
+        chunk_words = set(chunk.lower().split())
+        score = len(query_terms & chunk_words)
+        if score > 0:
+            scored.append((score, chunk))
+
+    scored.sort(reverse=True)
+    top = [chunk for _, chunk in scored[:3]]
+
+    return {
+        "query":   query,
+        "results": top if top else ["No specific information found for this query."],
+    }
+
+
 def schedule_followup(lead_id: str, delay_hours: int = 48,
                       followup_context: str = "", memory=None) -> dict:
     due_at = (datetime.now() + timedelta(hours=delay_hours)).isoformat()

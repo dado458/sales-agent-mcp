@@ -1,5 +1,20 @@
 SALES_TOOLS = [
     {
+        "name": "search_product_catalog",
+        "description": (
+            "Search the product catalog for information relevant to the lead's question "
+            "or objection. Call this before answering questions about features, pricing, "
+            "integrations, or use cases you are not certain about."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to look up (e.g. 'SAP integration', 'enterprise pricing', 'mobile app')"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "analyze_lead",
         "description": "Analyze the lead's message and context to determine phase, sentiment, and objection type.",
         "input_schema": {

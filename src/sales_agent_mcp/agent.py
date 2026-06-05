@@ -6,7 +6,7 @@ from edge_llm.core.tenants.base import TenantConfig
 
 from .pipeline import SalesPipeline
 from .tools.definitions import SALES_TOOLS
-from .tools.implementations import analyze_lead, get_reply_strategy, update_crm, schedule_followup
+from .tools.implementations import analyze_lead, get_reply_strategy, update_crm, schedule_followup, search_product_catalog
 
 _PROMPT_TEMPLATE = (Path(__file__).parent / "prompts" / "system.md").read_text(encoding="utf-8")
 
@@ -39,14 +39,23 @@ class SalesAgent(EdgeAgent):
     def get_tools(self) -> list[dict]:
         return SALES_TOOLS
 
-    def get_tool_map(self) -> dict[str, callable]:
+    def get_tool_map(self, tenant_id: str = "") -> dict[str, callable]:
         mem    = self._memory
         client = self._client
+        # Resolve the tenant's product catalog at call time so the tool
+        # closure always has the latest version (tenants can update it mid-session).
+        catalog = ""
+        if tenant_id:
+            try:
+                catalog = self._tenants.get(tenant_id).meta.get("product_catalog", "")
+            except KeyError:
+                pass
         return {
-            "analyze_lead":       lambda **kw: analyze_lead(**kw, client=client),
-            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw, client=client),
-            "update_crm":         lambda **kw: update_crm(**kw, memory=mem),
-            "schedule_followup":  lambda **kw: schedule_followup(**kw, memory=mem),
+            "search_product_catalog": lambda **kw: search_product_catalog(**kw, catalog=catalog),
+            "analyze_lead":           lambda **kw: analyze_lead(**kw, client=client),
+            "get_reply_strategy":     lambda **kw: get_reply_strategy(**kw, client=client),
+            "update_crm":             lambda **kw: update_crm(**kw, memory=mem),
+            "schedule_followup":      lambda **kw: schedule_followup(**kw, memory=mem),
         }
 
     def initial_entity_state(self) -> dict:
