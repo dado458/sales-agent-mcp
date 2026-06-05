@@ -213,6 +213,46 @@ def test_schedule_followup_without_memory():
     assert result["scheduled_at"]
 
 
+# ── Tool: search_product_catalog ──────────────────────────────────────────────
+
+from sales_agent_mcp.tools.implementations import search_product_catalog
+
+
+def test_search_catalog_no_catalog():
+    result = search_product_catalog(query="pricing")
+    assert result["results"] == []
+    assert "note" in result
+
+
+def test_search_catalog_keyword_hit():
+    catalog = "## Pricing\nStarter €29/month. Pro €99/month.\n\n## Features\nAI task router, Gantt chart."
+    result = search_product_catalog(query="pricing plan cost", catalog=catalog)
+    assert result["source"] == "keyword"
+    assert len(result["results"]) >= 1
+    assert any("Pricing" in r or "€" in r for r in result["results"])
+
+
+def test_search_catalog_keyword_no_match():
+    catalog = "## Features\nAI task router."
+    result = search_product_catalog(query="refund policy guarantee", catalog=catalog)
+    # No match → empty results (no keyword overlap)
+    assert result["results"] == [] or result.get("source") == "keyword"
+
+
+def test_search_catalog_store_fallback_to_keyword(tmp_path):
+    """If catalog_store.count() returns 0, should fall through to keyword search."""
+    from unittest.mock import MagicMock
+    mock_store = MagicMock()
+    mock_store.count.return_value = 0
+
+    catalog = "## Pricing\nStarter €29/month."
+    result = search_product_catalog(
+        query="pricing", catalog=catalog,
+        catalog_store=mock_store, tenant_id="t1",
+    )
+    assert result["source"] == "keyword"
+
+
 # ── SalesAgent ────────────────────────────────────────────────────────────────
 
 def test_agent_initial_state(agent):
@@ -266,7 +306,11 @@ def test_agent_tools_have_required_fields(agent):
 
 
 def test_agent_tool_map_complete(agent):
-    expected = {"analyze_lead", "get_reply_strategy", "update_crm", "schedule_followup"}
+    expected = {
+        "search_product_catalog",
+        "analyze_lead", "get_reply_strategy",
+        "update_crm", "schedule_followup",
+    }
     assert set(agent.get_tool_map().keys()) == expected
 
 
