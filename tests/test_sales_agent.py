@@ -99,6 +99,18 @@ def test_analyze_lead_truncates_preview():
     assert len(result["message_preview"]) == 120
 
 
+def test_analyze_lead_price_objection():
+    result = analyze_lead(message="It's too expensive for our budget", current_stage="OBJECTION")
+    assert result["objection_type"] == "price"
+    assert result["sentiment"] == "negative"
+    assert "objection" in result["hint"].lower()
+
+
+def test_analyze_lead_timing_objection():
+    result = analyze_lead(message="Not now, maybe next quarter", current_stage="OBJECTION")
+    assert result["objection_type"] == "timing"
+
+
 def test_analyze_lead_with_history():
     result = analyze_lead(
         message="Interessante", current_stage="INTERESTED",
@@ -127,6 +139,19 @@ def test_get_reply_strategy_all_strategies():
                      "handle_objection", "close", "nurture"]:
         result = get_reply_strategy(strategy=strategy, key_point="test")
         assert result["strategy"] == strategy
+
+
+def test_get_reply_strategy_has_real_talking_points():
+    result = get_reply_strategy(strategy="handle_objection", key_point="we offer a 30-day guarantee")
+    assert len(result["talking_points"]) >= 2
+    assert "we offer a 30-day guarantee" in result["talking_points"]
+    assert result["suggested_opening"]
+
+
+def test_get_reply_strategy_opening_matches_tone():
+    warm = get_reply_strategy(strategy="close", key_point="x", tone="warm")
+    urgent = get_reply_strategy(strategy="close", key_point="x", tone="urgent")
+    assert warm["suggested_opening"] != urgent["suggested_opening"]
 
 
 # ── Tool: update_crm ──────────────────────────────────────────────────────────
@@ -182,6 +207,23 @@ def test_update_crm_sets_next_action(tmp_path):
     state = mem.get_entity_state("lead-1")
     assert state["next_action"] == "send proposal"
     assert state["stage"] == "CLOSING"
+
+
+def test_update_crm_notifies_webhook_when_configured():
+    from unittest.mock import MagicMock
+    webhook = MagicMock()
+
+    update_crm(lead_id="lead-1", new_stage="CLOSING", notes="ready", webhook=webhook)
+
+    webhook.post.assert_called_once()
+    payload = webhook.post.call_args[0][0]
+    assert payload["lead_id"] == "lead-1"
+    assert payload["stage"] == "CLOSING"
+
+
+def test_update_crm_no_webhook_call_when_not_configured():
+    result = update_crm(lead_id="lead-1", new_stage="CLOSING")
+    assert result["updated"] is True
 
 
 # ── Tool: schedule_followup ───────────────────────────────────────────────────
@@ -317,3 +359,34 @@ def test_agent_tool_map_complete(agent):
 def test_agent_tool_map_all_callable(agent):
     for name, fn in agent.get_tool_map().items():
         assert callable(fn), f"Tool '{name}' is not callable"
+
+
+def test_agent_tool_map_wires_crm_webhook_from_tenant_meta(agent, monkeypatch):
+    from edge_llm.core.tenants.base import TenantConfig
+    agent._tenants.save(TenantConfig(
+        tenant_id="t1", meta={"crm_webhook_url": "https://hooks.example.com/crm"},
+    ))
+
+    calls = []
+
+    class _FakeResponse:
+        def raise_for_status(self): pass
+
+    def fake_post(url, json, timeout):
+        calls.append((url, json))
+        return _FakeResponse()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    update_crm_fn = agent.get_tool_map(tenant_id="t1")["update_crm"]
+    update_crm_fn(lead_id="lead-1", new_stage="CLOSING")
+
+    assert len(calls) == 1
+    assert calls[0][0] == "https://hooks.example.com/crm"
+    assert calls[0][1]["lead_id"] == "lead-1"
+
+
+def test_agent_tool_map_no_webhook_without_tenant_config(agent):
+    update_crm_fn = agent.get_tool_map(tenant_id="")["update_crm"]
+    result = update_crm_fn(lead_id="lead-1", new_stage="CLOSING")
+    assert result["updated"] is True

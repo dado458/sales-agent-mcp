@@ -2,109 +2,180 @@
 Domain tool implementations for the SalesAgent internal loop.
 These are called by EdgeAgent._execute_tools — they are NOT exposed via MCP.
 """
-import json
 from datetime import datetime, timedelta
 
-_ANALYSIS_MODEL  = "claude-haiku-4-5-20251001"
-_STRATEGY_MODEL  = "claude-haiku-4-5-20251001"
+# ── analyze_lead: deterministic lexicon-based analysis ──────────────────────
+# Bilingual (IT/EN) keyword lexicons. No second LLM call: the agent's own
+# turn already reasons over the message, this tool only needs to surface
+# structured signals it might miss (objection type, explicit buying intent).
+
+_BUYING_SIGNAL_WORDS = [
+    "prezzo", "costo", "quando", "iniziare", "quanto", "provare", "demo", "trial",
+    "price", "cost", "start", "when can we", "sign up", "subscribe",
+]
+_POSITIVE_WORDS = [
+    "ottimo", "perfetto", "interessante", "mi piace", "sì",
+    "great", "perfect", "interested", "love it", "sounds good", "yes",
+]
+_NEGATIVE_WORDS = [
+    "non sono sicuro", "troppo caro", "non mi convince", "no grazie",
+    "not sure", "too expensive", "not convinced", "no thanks", "not interested",
+]
+_OBJECTION_LEXICON = {
+    # Note: bare "prezzo"/"price"/"costo"/"cost" are NOT objection markers on their
+    # own — asking about price is a buying signal. Only clearly negative-leaning
+    # price language counts as an objection.
+    "price":  ["costoso", "costa troppo", "troppo caro", "fuori budget",
+               "too expensive", "expensive", "too much", "cheaper", "over budget"],
+    "timing": ["non ora", "più avanti", "trimestre prossimo", "non è il momento",
+               "not now", "later", "next quarter", "bad timing", "too busy"],
+    "fit":    ["non fa per noi", "non si adatta", "soluzione diversa",
+               "doesn't fit", "not what we need", "different solution", "not a good fit"],
+    "trust":  ["non vi conosco", "sicurezza", "affidabile", "garanzie",
+               "never heard of you", "security", "data privacy", "is this legit", "trustworthy"],
+}
+
+
+def _match_any(text: str, words: list[str]) -> list[str]:
+    return [w for w in words if w in text]
 
 
 def analyze_lead(message: str, current_stage: str,
-                 history_summary: str = "", client=None) -> dict:
-    if client is None:
-        return _analyze_lead_fallback(message, current_stage)
+                 history_summary: str = "") -> dict:
+    msg = message.lower()
 
-    prompt = f"""You are a sales analyst. Analyze the lead message below and return ONLY a JSON object with these keys:
-- "sentiment": "positive" | "neutral" | "negative"
-- "buying_signals": list of strings (signals detected, empty list if none)
-- "objection_type": "price" | "timing" | "fit" | "trust" | "none"
-- "recommended_action": short string describing what the sales agent should do next
-- "hint": one actionable sentence for the agent
+    buying_signals = _match_any(msg, _BUYING_SIGNAL_WORDS)
+    objection_type = "none"
+    for kind, words in _OBJECTION_LEXICON.items():
+        if _match_any(msg, words):
+            objection_type = kind
+            break
 
-Current pipeline stage: {current_stage}
-Conversation summary: {history_summary or "first interaction"}
-Lead message: {message}
+    if objection_type != "none":
+        sentiment = "negative"
+        recommended_action = "address objection"
+        hint = f"Lead raised a {objection_type} objection — address it directly before re-pitching."
+    elif buying_signals:
+        sentiment = "positive"
+        recommended_action = "advance stage"
+        hint = "Lead shows buying signals — consider advancing stage."
+    elif _match_any(msg, _NEGATIVE_WORDS):
+        sentiment = "negative"
+        recommended_action = "slow down, ask discovery questions"
+        hint = "Lead seems hesitant — slow down and ask discovery questions before pushing forward."
+    elif _match_any(msg, _POSITIVE_WORDS):
+        sentiment = "positive"
+        recommended_action = "continue building value"
+        hint = "Lead is receptive — keep building value and look for an opening to advance."
+    else:
+        sentiment = "neutral"
+        recommended_action = "continue building value"
+        hint = "Continue building value before proposing a step forward."
 
-Return only valid JSON, no markdown, no explanation."""
-
-    try:
-        resp = client.messages.create(
-            model=_ANALYSIS_MODEL,
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = resp.content[0].text.strip()
-        result = json.loads(raw)
-        result["current_stage"] = current_stage
-        return result
-    except Exception:
-        return _analyze_lead_fallback(message, current_stage)
-
-
-def _analyze_lead_fallback(message: str, current_stage: str) -> dict:
-    has_signal = any(
-        w in message.lower()
-        for w in ["prezzo", "costo", "quando", "iniziare", "price", "cost", "start", "quanto"]
-    )
     return {
-        "current_stage":    current_stage,
-        "message_preview":  message[:120],
-        "sentiment":        "positive" if has_signal else "neutral",
-        "buying_signals":   ["price inquiry"] if has_signal else [],
-        "objection_type":   "none",
-        "recommended_action": "advance stage" if has_signal else "continue building value",
-        "hint": (
-            "Lead shows buying signals — consider advancing stage."
-            if has_signal
-            else "Continue building value before proposing a step forward."
-        ),
+        "current_stage":      current_stage,
+        "message_preview":    message[:120],
+        "sentiment":          sentiment,
+        "buying_signals":     buying_signals,
+        "objection_type":     objection_type,
+        "recommended_action": recommended_action,
+        "hint":               hint,
     }
 
 
+# ── get_reply_strategy: deterministic playbook ──────────────────────────────
+
+_STRATEGY_PLAYBOOK = {
+    "build_rapport": {
+        "talking_points": [
+            "Acknowledge their specific context before pitching anything.",
+            "Find common ground (industry, team size, shared pain point).",
+        ],
+        "openings": {
+            "warm":         "Really glad to connect on this —",
+            "professional": "Thanks for taking the time to chat —",
+            "urgent":       "Quick one before we dive in —",
+        },
+    },
+    "discover_pain": {
+        "talking_points": [
+            "Ask an open question about their current workflow/bottleneck.",
+            "Avoid pitching features until the pain is explicit.",
+        ],
+        "openings": {
+            "warm":         "I'd love to understand your situation better —",
+            "professional": "To make sure I point you in the right direction —",
+            "urgent":       "Let's get straight to it —",
+        },
+    },
+    "build_value": {
+        "talking_points": [
+            "Lead with the outcome, not the feature list.",
+            "Tie it back to the pain point they already mentioned.",
+        ],
+        "openings": {
+            "warm":         "Here's something that might really help —",
+            "professional": "Based on what you've shared, this is relevant —",
+            "urgent":       "Here's the key point —",
+        },
+    },
+    "handle_objection": {
+        "talking_points": [
+            "Validate the concern before countering it.",
+            "Use a concrete proof point (case study, number, guarantee).",
+        ],
+        "openings": {
+            "warm":         "That's a fair point, and I want to be upfront —",
+            "professional": "I understand the concern — here's some context —",
+            "urgent":       "Let me address that directly —",
+        },
+    },
+    "close": {
+        "talking_points": [
+            "Propose a clear, low-friction next step (call, trial, contract).",
+            "Create gentle urgency only if it's genuinely true.",
+        ],
+        "openings": {
+            "warm":         "I think we're in a great spot to move forward —",
+            "professional": "Here's a simple way to move ahead —",
+            "urgent":       "Let's lock this in —",
+        },
+    },
+    "nurture": {
+        "talking_points": [
+            "No hard pitch — share something genuinely useful.",
+            "Leave the door open without pressuring for a reply.",
+        ],
+        "openings": {
+            "warm":         "Just thought of you when I saw this —",
+            "professional": "Wanted to share something relevant —",
+            "urgent":       "Quick thought, no pressure —",
+        },
+    },
+}
+
+
 def get_reply_strategy(strategy: str, key_point: str,
-                       tone: str = "professional", client=None) -> dict:
-    if client is None:
-        return _strategy_fallback(strategy, key_point, tone)
+                       tone: str = "professional") -> dict:
+    playbook = _STRATEGY_PLAYBOOK.get(strategy, {
+        "talking_points": ["Use this context to craft your reply."],
+        "openings": {},
+    })
+    opening = playbook["openings"].get(tone, playbook["openings"].get("professional", ""))
+    talking_points = [*playbook["talking_points"], key_point]
 
-    prompt = f"""You are a sales coach. Generate a reply strategy for a sales agent and return ONLY a JSON object with these keys:
-- "strategy": the strategy name (use the one provided)
-- "key_point": the core message to convey
-- "tone": the tone to use
-- "talking_points": list of 2-3 short bullet points to include in the reply
-- "suggested_opening": one sentence to open the reply naturally
-- "hint": one sentence of coaching advice
-
-Strategy: {strategy}
-Key point to convey: {key_point}
-Tone: {tone}
-
-Return only valid JSON, no markdown, no explanation."""
-
-    try:
-        resp = client.messages.create(
-            model=_STRATEGY_MODEL,
-            max_tokens=350,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = resp.content[0].text.strip()
-        return json.loads(raw)
-    except Exception:
-        return _strategy_fallback(strategy, key_point, tone)
-
-
-def _strategy_fallback(strategy: str, key_point: str, tone: str) -> dict:
     return {
         "strategy":          strategy,
         "key_point":         key_point,
         "tone":              tone,
-        "talking_points":    [],
-        "suggested_opening": "",
-        "hint":              "Use this context to craft your reply. Keep it under 4 sentences.",
+        "talking_points":    talking_points,
+        "suggested_opening": opening,
+        "hint":              "Keep it under 4 sentences and lead with the key point.",
     }
 
 
 def update_crm(lead_id: str, new_stage: str, notes: str = "",
-               next_action: str = "", memory=None) -> dict:
+               next_action: str = "", memory=None, webhook=None) -> dict:
     if memory:
         state = memory.get_entity_state(lead_id) or {}
         existing_notes = state.get("notes", [])
@@ -114,6 +185,16 @@ def update_crm(lead_id: str, new_stage: str, notes: str = "",
             existing_notes.append(notes)
         memory.update_entity_state(lead_id, stage=new_stage,
                                    notes=existing_notes, next_action=next_action)
+
+    if webhook:
+        webhook.post({
+            "event":       "crm_update",
+            "lead_id":     lead_id,
+            "stage":       new_stage,
+            "notes":       notes,
+            "next_action": next_action,
+        })
+
     return {"lead_id": lead_id, "stage": new_stage, "updated": True}
 
 

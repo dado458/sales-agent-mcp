@@ -47,13 +47,18 @@ class SalesAgent(EdgeAgent):
 
     def get_tool_map(self, tenant_id: str = "") -> dict[str, callable]:
         mem           = self._memory
-        client        = self._client
         catalog_store = self._catalog_store
-        # Resolve text catalog from tenant meta (keyword fallback when no vector store).
-        catalog = ""
+        # Resolve per-tenant config from meta (keyword catalog fallback, CRM webhook).
+        catalog       = ""
+        crm_webhook   = None
         if tenant_id:
             try:
-                catalog = self._tenants.get(tenant_id).meta.get("product_catalog", "")
+                meta = self._tenants.get(tenant_id).meta
+                catalog = meta.get("product_catalog", "")
+                webhook_url = meta.get("crm_webhook_url", "")
+                if webhook_url:
+                    from edge_llm.core.integrations import WebhookClient
+                    crm_webhook = WebhookClient(webhook_url)
             except KeyError:
                 pass
         return {
@@ -63,9 +68,9 @@ class SalesAgent(EdgeAgent):
                 catalog_store=catalog_store,
                 tenant_id=tenant_id,
             ),
-            "analyze_lead":       lambda **kw: analyze_lead(**kw, client=client),
-            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw, client=client),
-            "update_crm":         lambda **kw: update_crm(**kw, memory=mem),
+            "analyze_lead":       lambda **kw: analyze_lead(**kw),
+            "get_reply_strategy": lambda **kw: get_reply_strategy(**kw),
+            "update_crm":         lambda **kw: update_crm(**kw, memory=mem, webhook=crm_webhook),
             "schedule_followup":  lambda **kw: schedule_followup(**kw, memory=mem),
         }
 
